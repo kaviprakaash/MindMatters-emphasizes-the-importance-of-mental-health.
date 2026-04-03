@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Prescription Insights - Mental Wellness Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+        <div class="flex items-center mb-4">
+            <div class="gradient-bg p-2 rounded-lg mr-3">
+                <i class="fas fa-pills text-white"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900">Prescription Insights</h1>
+        </div>
+        <p class="text-gray-600">AI-powered analysis of your prescription medications.</p>
+    </div>
+
+    {% if insights %}
+        <div class="space-y-6">
+            {% for insight in insights %}
+            <div class="bg-white card-shadow rounded-xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ insight.name }}</h3>
+                    <span class="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700">AI Analyzed</span>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <h4 class="font-medium text-gray-900 mb-1">Use:</h4>
+                        <p class="text-gray-700">{{ insight.use }}</p>
+                    </div>
+                    <div>
+                        <h4 class="font-medium text-gray-900 mb-1">Common Side Effects:</h4>
+                        <ul class="list-disc list-inside text-gray-700 space-y-1">
+                            {% for effect in insight.side_effects %}
+                            <li>{{ effect }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if ocr_text %}
+    <div class="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <details>
+            <summary class="cursor-pointer text-sm font-medium text-gray-700">Extracted Text from Prescription</summary>
+            <pre class="mt-3 text-xs whitespace-pre-wrap text-gray-600">{{ ocr_text }}</pre>
+        </details>
+    </div>
+    {% endif %}
+
+    <div class="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-shield-alt text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">Safety Disclaimer</h3>
+                <div class="mt-2 text-sm text-red-700">
+                    <p>This information is for educational purposes only and not medical advice. Please consult a qualified healthcare professional for personalized medical advice, diagnosis, or treatment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-center">
+        <a href="{{ url_for('upload_prescription') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Upload Another Prescription
+        </a>
+    </div>
+</div>
+{% endblock %}

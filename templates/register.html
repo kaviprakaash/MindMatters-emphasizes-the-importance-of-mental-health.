@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block nav %}
+<nav class="bg-white shadow-lg border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-center h-16">
+            <div class="flex items-center">
+                <div class="gradient-bg p-2 rounded-lg mr-3">
+                    <i class="fas fa-brain text-white text-lg"></i>
+                </div>
+                <h1 class="text-xl font-bold text-gray-900">Mental Wellness Assistant</h1>
+            </div>
+        </div>
+    </div>
+</nav>
+{% endblock %}
+
+{% block title %}Register - Mental Wellness Assistant{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <div class="text-center">
+            <div class="gradient-bg p-3 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <i class="fas fa-user-plus text-white text-2xl"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-900">Create Account</h2>
+            <p class="mt-2 text-sm text-gray-600">Join our community and start your wellness journey</p>
+        </div>
+
+        <div class="bg-white card-shadow rounded-xl p-8">
+            <form method="POST" class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-user mr-2 text-gray-400"></i>
+                        Username
+                    </label>
+                    <input type="text" id="username" name="username" required
+                           class="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm transition-colors duration-200"
+                           placeholder="Choose a username">
+                </div>
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-envelope mr-2 text-gray-400"></i>
+                        Email Address
+                    </label>
+                    <input type="email" id="email" name="email" required
+                           class="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm transition-colors duration-200"
+                           placeholder="Enter your email">
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-lock mr-2 text-gray-400"></i>
+                        Password
+                    </label>
+                    <input type="password" id="password" name="password" required
+                           class="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm transition-colors duration-200"
+                           placeholder="Create a password">
+                </div>
+
+                <div>
+                    <button type="submit" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white btn-primary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+                            <i class="fas fa-user-plus text-indigo-500 group-hover:text-indigo-400"></i>
+                        </span>
+                        Create Account
+                    </button>
+                </div>
+            </form>
+
+            {% include '_google_signin_block.html' %}
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-600">
+                    Already have an account?
+                    <a href="{{ url_for('login') }}" class="font-medium text-indigo-600 hover:text-indigo-500 transition-colors duration-200">
+                        Sign in here
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
