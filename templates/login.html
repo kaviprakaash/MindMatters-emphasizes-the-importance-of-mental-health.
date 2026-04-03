@@ -60,7 +60,35 @@
                 </div>
             </form>
 
-            {% include '_google_signin_block.html' %}
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                    <div class="w-full border-t border-gray-200"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                    <span class="px-2 bg-white text-gray-500">Or</span>
+                </div>
+            </div>
+            {% if google_oauth_available %}
+            <a href="{{ url_for('login_google') }}"
+               class="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                {% include 'partials/google_g_logo.html' %}
+                <span>Continue with Google</span>
+            </a>
+            {% else %}
+            <div class="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-3 text-sm text-amber-950 space-y-2">
+                <p class="font-medium text-amber-900">Google sign-in needs setup</p>
+                {% if not google_oauth_deps_ok %}
+                <p class="text-amber-900/90">Install packages, then restart the app: <code class="text-xs bg-white/80 px-1 rounded">pip install -r requirements.txt</code></p>
+                {% elif not google_oauth_have_creds %}
+                <p class="text-amber-900/90">Open the <code class="text-xs bg-white/80 px-1 rounded">.env</code> file next to <code class="text-xs bg-white/80 px-1 rounded">app.py</code> and paste your <strong>real</strong> OAuth values from Google Cloud (no quotes, nothing after <code>=</code> left blank):</p>
+                <pre class="text-xs bg-white/80 p-2 rounded overflow-x-auto whitespace-pre-wrap">GOOGLE_CLIENT_ID=123456-abc.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...</pre>
+                <p class="text-amber-900/90">Google Cloud Console → APIs &amp; Services → Credentials → your <strong>Web</strong> OAuth 2.0 Client ID → copy Client ID and Client secret. Authorized redirect URI must include <code class="text-xs bg-white/80 px-1 rounded">http://127.0.0.1:5000/login/google/callback</code>. Save <code class="text-xs bg-white/80 px-1 rounded">.env</code>, stop Flask (Ctrl+C), start again.</p>
+                {% else %}
+                <p class="text-amber-900/90">Google sign-in should work; try a hard refresh. If this box remains, restart Flask.</p>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <div class="mt-6 text-center">
                 <p class="text-sm text-gray-600">

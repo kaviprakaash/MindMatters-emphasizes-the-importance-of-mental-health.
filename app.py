@@ -1,6 +1,47 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from pathlib import Path
 import os
 import sqlite3
+
+_APP_DIR = Path(__file__).resolve().parent
+_ENV_FILE = _APP_DIR / '.env'
+
+
+def _load_simple_env_file(path: Path):
+    """Set os.environ from KEY=VALUE lines if python-dotenv is not installed."""
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding='utf-8-sig')
+    except OSError:
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('export '):
+            line = line[7:].strip()
+        if '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+try:
+    from dotenv import load_dotenv
+
+    # override=True: `.env` wins over empty GOOGLE_* from shell/Windows/IDE.
+    load_dotenv(_ENV_FILE, override=True)
+except ImportError:
+    _load_simple_env_file(_ENV_FILE)
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import get_db, init_db
 from datetime import datetime
@@ -17,9 +58,15 @@ import threading
 import uuid
 import secrets
 
-import requests
-from google_auth_oauthlib.flow import Flow
-from werkzeug.middleware.proxy_fix import ProxyFix
+try:
+    from google_auth_oauthlib.flow import Flow
+except ImportError:
+    Flow = None
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 try:
     from PIL import Image
@@ -33,134 +80,14 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change')
-# So https:// and host are correct behind Railway / Render / nginx (needed for OAuth redirect URLs).
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
-
-GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
-GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
-# Optional: exact callback URL if auto-detected url_for is wrong (local: http://127.0.0.1:5000/auth/google/callback).
-OAUTH_REDIRECT_URI = os.environ.get('OAUTH_REDIRECT_URI', '').strip()
-
-
-def _google_oauth_configured():
-    return bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET)
-
-
-def _google_redirect_uri():
-    if OAUTH_REDIRECT_URI:
-        return OAUTH_REDIRECT_URI.rstrip('/')
-    return url_for('auth_google_callback', _external=True)
-
-
-def _google_flow(redirect_uri):
-    return Flow.from_client_config(
-        {
-            'web': {
-                'client_id': GOOGLE_OAUTH_CLIENT_ID,
-                'client_secret': GOOGLE_OAUTH_CLIENT_SECRET,
-                'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                'token_uri': 'https://oauth2.googleapis.com/token',
-                'redirect_uris': [redirect_uri],
-            }
-        },
-        scopes=[
-            'openid',
-            'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/userinfo.profile',
-        ],
-        redirect_uri=redirect_uri,
-    )
-
-
-def _oauth_pick_username(db, email, google_sub):
-    raw = (email or '').split('@')[0]
-    base = re.sub(r'[^a-zA-Z0-9_]', '_', raw)[:20].strip('_') or 'user'
-    for attempt in range(40):
-        candidate = base if attempt == 0 else f'{base[:14]}_{attempt}'
-        candidate = candidate[:32]
-        if not db.execute('SELECT 1 FROM users WHERE username = ?', (candidate,)).fetchone():
-            return candidate
-    tail = (google_sub or '')[-6:] or secrets.token_hex(4)
-    return f'g_{tail}'[:32]
+# So request.url / scheme match the public host when behind ngrok or a reverse proxy.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 AI_PROVIDER = os.environ.get('AI_PROVIDER', 'auto').strip().lower()  # auto | openai | ollama
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
-<<<<<<< HEAD
-# Optional: if Ollama sits behind a reverse proxy that requires a bearer token.
-OLLAMA_API_KEY = os.environ.get('OLLAMA_API_KEY', '').strip()
-
-
-def _ollama_http_headers():
-    h = {'Content-Type': 'application/json'}
-    if OLLAMA_API_KEY:
-        h['Authorization'] = f'Bearer {OLLAMA_API_KEY}'
-    return h
-# Env vars set on common PaaS — used to avoid defaulting to 127.0.0.1 Ollama (nothing listening).
-_CLOUD_ENV_MARKERS = (
-    'RENDER', 'RAILWAY_ENVIRONMENT', 'RAILWAY_PROJECT_ID', 'FLY_APP_NAME',
-    'HEROKU_APP_NAME', 'DYNO', 'K_SERVICE', 'AWS_EXECUTION_ENV',
-    'GAE_ENV', 'WEBSITE_INSTANCE_ID', 'VERCEL', 'CODESPACES',
-)
-
-
-def _is_likely_cloud_host():
-    return any(os.environ.get(k) for k in _CLOUD_ENV_MARKERS)
-
-
-def _ollama_url_looks_local():
-    try:
-        parsed = urllib.parse.urlparse((OLLAMA_BASE_URL or 'http://127.0.0.1:11434').strip() + '/')
-        host = (parsed.hostname or '').lower()
-        return host in ('127.0.0.1', 'localhost', '::1', '')
-    except Exception:
-        return True
-
-
-def _ollama_reachable_in_this_runtime():
-    """
-    Hosted containers have no local Ollama unless OLLAMA_BASE_URL points elsewhere.
-    Set ALLOW_LOCAL_OLLAMA=1 to force trying loopback Ollama (unusual).
-    """
-    if os.environ.get('ALLOW_LOCAL_OLLAMA', '').strip().lower() in ('1', 'true', 'yes', 'on'):
-        return True
-    if not _ollama_url_looks_local():
-        return True
-    if _is_likely_cloud_host():
-        return False
-    return True
-
-
-def _ai_not_configured_message():
-    return (
-        "AI isn’t configured for this deployment. Options: (1) Set OPENAI_API_KEY, or (2) Run Ollama on a "
-        "separate server or Docker host and set OLLAMA_BASE_URL to that base URL (https://…), not 127.0.0.1. "
-        "Cloud web hosts do not bundle Ollama inside the same small container; use Docker Compose on a VPS "
-        "or a tunnel (e.g. ngrok) to a machine with Ollama. Optional: OLLAMA_API_KEY for authenticated proxies."
-    )
-
-
-def _effective_llm_mode():
-    """openai | ollama | unconfigured — for AI_PROVIDER / auto without local Ollama on cloud."""
-    base = (AI_PROVIDER or 'auto').strip().lower()
-    if base not in ('auto', 'openai', 'ollama'):
-        base = 'auto'
-    if base == 'auto':
-        if OPENAI_API_KEY:
-            return 'openai'
-        if _ollama_reachable_in_this_runtime():
-            return 'ollama'
-        return 'unconfigured'
-    if base == 'openai':
-        return 'openai' if OPENAI_API_KEY else 'unconfigured'
-    if base == 'ollama':
-        return 'ollama' if _ollama_reachable_in_this_runtime() else 'unconfigured'
-    return 'unconfigured'
-
-=======
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 OPENFDA_BASE_URL = "https://api.fda.gov/drug/label.json"
 # Optional: https://open.fda.gov/apis/authentication/ — raises rate limits and can reduce failed requests.
 OPENFDA_API_KEY = os.environ.get('OPENFDA_API_KEY', '').strip()
@@ -169,6 +96,104 @@ RXNAV_BASE_URL = "https://rxnav.nlm.nih.gov/REST"
 MEDICATION_CACHE_DAYS = int(os.environ.get('MEDICATION_CACHE_DAYS', '30'))
 # Increment (or set env) when lookup/cache semantics change so old rows are ignored.
 MEDICATION_CACHE_KEY_VERSION = os.environ.get('MEDICATION_CACHE_KEY_VERSION', '3').strip()
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
+_GOOGLE_SCOPES = (
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+)
+
+
+def _google_oauth_configured():
+    return bool(Flow and requests and GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+
+def _google_redirect_uri():
+    base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    if base:
+        return f'{base}/login/google/callback'
+    return url_for('google_callback', _external=True)
+
+
+def _google_authorization_response_url():
+    """
+    Full callback URL (including ?code=&state=). Must match the redirect_uri sent
+    to Google. Behind ngrok, request.url is often http://127.0.0.1:5000/... which
+    breaks fetch_token unless we rebuild with PUBLIC_BASE_URL or ProxyFix.
+    """
+    base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    if base:
+        return f'{base}{request.full_path}'
+    return request.url
+
+
+def _google_flow(state=None):
+    redirect_uri = _google_redirect_uri()
+    return Flow.from_client_config(
+        {
+            'web': {
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET,
+                'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                'token_uri': 'https://oauth2.googleapis.com/token',
+                'redirect_uris': [redirect_uri],
+            }
+        },
+        scopes=list(_GOOGLE_SCOPES),
+        redirect_uri=redirect_uri,
+        state=state,
+    )
+
+
+def _unique_username_for_email(db, email):
+    local = (email.split('@')[0] if '@' in email else email).lower()
+    base = re.sub(r'[^a-z0-9_]+', '_', local).strip('_')[:40] or 'user'
+    candidate = base
+    n = 0
+    while True:
+        taken = db.execute(
+            'SELECT 1 AS ok FROM users WHERE username = ?',
+            (candidate,),
+        ).fetchone()
+        if not taken:
+            return candidate
+        n += 1
+        candidate = f'{base}_{n}'
+
+
+def _google_upsert_user(db, google_sub, email):
+    email = (email or '').strip()
+    if not google_sub or not email:
+        return None
+    row = db.execute(
+        'SELECT * FROM users WHERE google_sub = ?',
+        (google_sub,),
+    ).fetchone()
+    if row:
+        return row
+    row = db.execute(
+        'SELECT * FROM users WHERE LOWER(email) = LOWER(?)',
+        (email,),
+    ).fetchone()
+    if row:
+        if row['google_sub'] and row['google_sub'] != google_sub:
+            return None
+        db.execute(
+            'UPDATE users SET google_sub = ? WHERE id = ?',
+            (google_sub, row['id']),
+        )
+        return db.execute('SELECT * FROM users WHERE id = ?', (row['id'],)).fetchone()
+    username = _unique_username_for_email(db, email)
+    placeholder_pw = generate_password_hash(secrets.token_hex(32))
+    db.execute(
+        'INSERT INTO users (username, email, password, google_sub) VALUES (?, ?, ?, ?)',
+        (username, email, placeholder_pw, google_sub),
+    )
+    uid = db.execute('SELECT last_insert_rowid() AS id').fetchone()['id']
+    return db.execute('SELECT * FROM users WHERE id = ?', (uid,)).fetchone()
+
 
 def _medication_cache_storage_key(normalized_query):
     v = MEDICATION_CACHE_KEY_VERSION or '1'
@@ -194,6 +219,18 @@ RANDOM_MATCH_LOCK = threading.Lock()
 
 # Initialize DB
 init_db()
+
+
+@app.context_processor
+def inject_google_oauth():
+    deps_ok = bool(Flow and requests)
+    have_creds = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+    return {
+        'google_oauth_available': _google_oauth_configured(),
+        'google_oauth_deps_ok': deps_ok,
+        'google_oauth_have_creds': have_creds,
+    }
+
 
 # -----------------------------
 # 🧠 SYSTEM PROMPT (HUMAN-LIKE)
@@ -284,11 +321,7 @@ def generate_ollama_response(message, history_turns):
     req = urllib.request.Request(
         f"{OLLAMA_BASE_URL}/api/chat",
         data=json.dumps(payload).encode("utf-8"),
-<<<<<<< HEAD
-        headers=_ollama_http_headers(),
-=======
         headers={"Content-Type": "application/json"},
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
         method="POST"
     )
 
@@ -296,13 +329,6 @@ def generate_ollama_response(message, history_turns):
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.URLError as e:
-<<<<<<< HEAD
-        if _ollama_url_looks_local() and (
-            _is_likely_cloud_host() or 'Connection refused' in str(e) or 'Errno 111' in str(e)
-        ):
-            raise RuntimeError(_ai_not_configured_message()) from e
-=======
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
         raise RuntimeError(
             "Could not reach Ollama. Start it with `ollama serve` and pull a model "
             f"like `ollama pull {OLLAMA_MODEL}`. Error: {e}"
@@ -326,25 +352,16 @@ def _llm_single_turn(
     """One-shot chat completion (OpenAI or Ollama). provider_override: 'openai' | 'ollama' | None (use AI_PROVIDER)."""
     to_openai = 45 if timeout_openai is None else timeout_openai
     to_ollama = 90 if timeout_ollama is None else timeout_ollama
-<<<<<<< HEAD
-    ov = provider_override
-    if ov in ('openai', 'ollama'):
-        if ov == 'openai' and not OPENAI_API_KEY:
-            provider = 'unconfigured'
-        elif ov == 'ollama' and not _ollama_reachable_in_this_runtime():
-            provider = 'unconfigured'
-        else:
-            provider = ov
+    override = provider_override
+    base = (AI_PROVIDER or 'auto').strip().lower()
+    if base not in ('auto', 'openai', 'ollama'):
+        base = 'auto'
+    if override in ('openai', 'ollama'):
+        provider = override
     else:
-        provider = _effective_llm_mode()
-
-    if provider == 'unconfigured':
-        raise RuntimeError(_ai_not_configured_message())
-=======
-    provider = (provider_override or AI_PROVIDER or 'auto').strip().lower()
-    if provider == 'auto':
-        provider = 'openai' if OPENAI_API_KEY else 'ollama'
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
+        provider = base
+        if provider == 'auto':
+            provider = 'openai' if OPENAI_API_KEY else 'ollama'
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -390,11 +407,7 @@ def _llm_single_turn(
         req = urllib.request.Request(
             f"{OLLAMA_BASE_URL}/api/chat",
             data=body,
-<<<<<<< HEAD
-            headers=_ollama_http_headers(),
-=======
             headers={"Content-Type": "application/json"},
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
             method="POST",
         )
         try:
@@ -414,11 +427,7 @@ def _llm_single_turn(
             raise RuntimeError("Ollama returned an empty response.")
         return content
 
-<<<<<<< HEAD
-    raise ValueError("Invalid AI provider resolution.")
-=======
     raise ValueError("Invalid AI_PROVIDER. Use 'auto', 'openai', or 'ollama'.")
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 
 def _parse_json_object_from_llm(text):
     """Extract first JSON object from model output (strips markdown fences if present)."""
@@ -616,23 +625,6 @@ def ollama_medication_lookup(raw_name):
             ollama_format_json=True,
         )
     except Exception as ex:
-<<<<<<< HEAD
-        ex_s = str(ex).lower()
-        if _is_likely_cloud_host() or 'connection refused' in ex_s or 'errno 111' in ex_s:
-            msg = (
-                "This path needs a local Ollama server, which hosted apps don’t have. "
-                "Use Get Medication Info on the latest deploy—it uses the FDA database instead. "
-                f"If you still see this, redeploy. Technical detail: {ex}"
-            )
-        else:
-            msg = (
-                "If `ollama serve` says the address is already in use, Ollama is already running—"
-                f"confirm `ollama list` includes `{OLLAMA_MODEL}`. Details: {ex}"
-            )
-        return {
-            "found": False,
-            "message": msg,
-=======
         hint = (
             "If `ollama serve` says the address is already in use, Ollama is already running (e.g. the desktop app) - "
             "you do not need to start it again. "
@@ -642,7 +634,6 @@ def ollama_medication_lookup(raw_name):
         return {
             "found": False,
             "message": f"{hint}Details: {ex}",
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
             "disclaimer": MEDICATION_DISCLAIMER,
         }
     obj = _parse_json_object_from_llm(text)
@@ -1338,7 +1329,7 @@ def register():
         finally:
             db.close()
 
-    return render_template('register.html', google_oauth_enabled=_google_oauth_configured())
+    return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1360,111 +1351,77 @@ def login():
         else:
             flash("Invalid credentials", "error")
 
-    return render_template('login.html', google_oauth_enabled=_google_oauth_configured())
+    return render_template('login.html')
 
 
-@app.route('/auth/google')
-def auth_google():
+@app.route('/login/google')
+def login_google():
     if not _google_oauth_configured():
-        flash('Google sign-in is not configured on this server.', 'error')
+        flash('Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.', 'error')
         return redirect(url_for('login'))
-    redirect_uri = _google_redirect_uri()
-    flow_state = secrets.token_urlsafe(32)
-    session['google_oauth_state'] = flow_state
     try:
-        flow = _google_flow(redirect_uri)
-        authorization_url, _ = flow.authorization_url(
+        flow = _google_flow()
+        authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
             prompt='select_account',
-            state=flow_state,
         )
     except Exception:
-        traceback.print_exc()
+        app.logger.exception('Google OAuth: failed to start authorization URL')
         flash('Could not start Google sign-in.', 'error')
         return redirect(url_for('login'))
+    session['google_oauth_state'] = state
     return redirect(authorization_url)
 
 
-@app.route('/auth/google/callback')
-def auth_google_callback():
+@app.route('/login/google/callback')
+def google_callback():
     if not _google_oauth_configured():
+        flash('Google sign-in is not configured.', 'error')
         return redirect(url_for('login'))
     if request.args.get('error'):
-        flash('Google sign-in was cancelled or denied.', 'error')
+        flash('Google sign-in was cancelled.', 'error')
         return redirect(url_for('login'))
-    stored_state = session.pop('google_oauth_state', None)
-    if not stored_state or stored_state != request.args.get('state'):
-        flash('Sign-in expired. Please try again.', 'error')
+    state = session.pop('google_oauth_state', None)
+    if state is None or state != request.args.get('state'):
+        flash('Sign-in session expired. Please try again.', 'error')
         return redirect(url_for('login'))
-    redirect_uri = _google_redirect_uri()
     try:
-        flow = _google_flow(redirect_uri)
-        flow.fetch_token(authorization_response=request.url)
-        creds = flow.credentials
+        flow = _google_flow(state=state)
+        flow.fetch_token(authorization_response=_google_authorization_response_url())
     except Exception:
-        traceback.print_exc()
-        flash('Could not finish Google sign-in. Try again.', 'error')
+        app.logger.exception('Google OAuth token exchange failed')
+        flash('Could not complete Google sign-in.', 'error')
         return redirect(url_for('login'))
     try:
-        resp = requests.get(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            headers={'Authorization': f'Bearer {creds.token}'},
-            timeout=12,
+        r = requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {flow.credentials.token}'},
+            timeout=15,
         )
-        if not resp.ok:
-            flash('Could not load your Google profile.', 'error')
-            return redirect(url_for('login'))
-        info = resp.json()
+        r.raise_for_status()
+        info = r.json()
     except Exception:
-        traceback.print_exc()
-        flash('Could not load your Google profile.', 'error')
+        app.logger.exception('Google userinfo request failed')
+        flash('Could not read your Google profile.', 'error')
         return redirect(url_for('login'))
-
-    google_sub = (info.get('sub') or '').strip()
-    email = (info.get('email') or '').strip().lower()
+    google_sub = info.get('id')
+    email = info.get('email')
     if not google_sub or not email:
-        flash('Your Google account must have an email address to sign in here.', 'error')
+        flash('Google did not return an account email.', 'error')
         return redirect(url_for('login'))
-
     db = get_db()
     try:
-        user = db.execute(
-            'SELECT * FROM users WHERE google_sub = ?', (google_sub,)
-        ).fetchone()
+        user = _google_upsert_user(db, str(google_sub), str(email))
         if not user:
-            user = db.execute(
-                "SELECT * FROM users WHERE lower(email) = ?", (email,)
-            ).fetchone()
-            if user:
-                existing_sub = user['google_sub'] if user['google_sub'] else None
-                if existing_sub and existing_sub != google_sub:
-                    flash('This email is already used with a different Google account.', 'error')
-                    return redirect(url_for('login'))
-                db.execute(
-                    'UPDATE users SET google_sub = ? WHERE id = ?',
-                    (google_sub, user['id']),
-                )
-                db.commit()
-                user = db.execute('SELECT * FROM users WHERE id = ?', (user['id'],)).fetchone()
-        if not user:
-            username = _oauth_pick_username(db, email, google_sub)
-            placeholder_pw = generate_password_hash(secrets.token_hex(32))
-            db.execute(
-                'INSERT INTO users (username, email, password, google_sub) VALUES (?, ?, ?, ?)',
-                (username, email, placeholder_pw, google_sub),
-            )
-            db.commit()
-            user = db.execute(
-                'SELECT * FROM users WHERE google_sub = ?', (google_sub,)
-            ).fetchone()
+            flash('This email is already linked to another Google account.', 'error')
+            return redirect(url_for('login'))
+        db.commit()
         session['user_id'] = user['id']
         session['username'] = user['username']
-        flash("You're signed in with Google.", 'success')
         return redirect(url_for('dashboard'))
     except sqlite3.IntegrityError:
         db.rollback()
-        flash('Could not create your account (duplicate details). Try signing in with username/password or contact support.', 'error')
+        flash('Could not create your account. Try again or use username/password.', 'error')
         return redirect(url_for('login'))
     finally:
         db.close()
@@ -1842,20 +1799,6 @@ def api_chat():
         if detect_crisis(message):
             response = crisis_response()
         else:
-<<<<<<< HEAD
-            mode = _effective_llm_mode()
-            if mode == 'unconfigured':
-                response = (
-                    f"{_ai_not_configured_message()} "
-                    "If you’re in crisis, contact local emergency services or a crisis line right away."
-                )
-            elif mode == 'openai':
-                response = generate_ai_response(message, history_turns)
-            elif mode == 'ollama':
-                response = generate_ollama_response(message, history_turns)
-            else:
-                raise ValueError("Invalid AI provider mode.")
-=======
             provider = AI_PROVIDER
             if provider == 'auto':
                 provider = 'openai' if OPENAI_API_KEY else 'ollama'
@@ -1866,7 +1809,6 @@ def api_chat():
                 response = generate_ollama_response(message, history_turns)
             else:
                 raise ValueError("Invalid AI_PROVIDER. Use 'auto', 'openai', or 'ollama'.")
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 
         # Save chat
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1902,11 +1844,7 @@ def mood_data():
 
 @app.route('/api/medication_info', methods=['POST'])
 def api_medication_info():
-<<<<<<< HEAD
-    """Medication summary from typed name: OpenFDA + cache + local fallback (hosted-friendly; no local Ollama required)."""
-=======
     """Medication summary via Ollama from typed name only (educational, not medical advice)."""
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -1925,25 +1863,6 @@ def api_medication_info():
                 "disclaimer": MEDICATION_DISCLAIMER,
             }), 200
 
-<<<<<<< HEAD
-        info = get_medication_information(medicine)
-        if info.get("found"):
-            card = {
-                "drug_name": info.get("drug_name"),
-                "use": info.get("use") or "Not available",
-                "side_effects": info.get("side_effects") or "Not available",
-            }
-            return jsonify({
-                "found": True,
-                "results": [card],
-                "disclaimer": info.get("disclaimer", MEDICATION_DISCLAIMER),
-            }), 200
-        return jsonify({
-            "found": False,
-            "message": info.get("message") or "No information found.",
-            "disclaimer": info.get("disclaimer", MEDICATION_DISCLAIMER),
-        }), 200
-=======
         info = ollama_medication_lookup(medicine)
         if info.get("found"):
             return jsonify({
@@ -1952,7 +1871,6 @@ def api_medication_info():
                 "disclaimer": MEDICATION_DISCLAIMER,
             }), 200
         return jsonify(info), 200
->>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
     except Exception as e:
         traceback.print_exc()
         return jsonify({
