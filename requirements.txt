@@ -5,3 +5,4 @@ Pillow==11.2.1
 pytesseract==0.3.13
 google-auth-oauthlib==1.2.1
 requests==2.32.3
+gunicorn==23.0.0
