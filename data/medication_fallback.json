@@ -1,0 +1,62 @@
+{
+  "paracetamol": {
+    "use": "Pain and fever relief (same family as acetaminophen).",
+    "side_effects": "Usually mild at normal doses; nausea or rash can occur.",
+    "safety_warnings": "Do not exceed labeled doses; can harm the liver, especially with alcohol or existing liver disease."
+  },
+  "acetaminophen": {
+    "use": "Relieves mild to moderate pain and reduces fever.",
+    "side_effects": "Usually well tolerated; rare allergic reactions.",
+    "safety_warnings": "Overdose can cause serious liver injury. Check all products for acetaminophen to avoid double dosing."
+  },
+  "ibuprofen": {
+    "use": "Reduces pain, inflammation, and fever.",
+    "side_effects": "Stomach upset, heartburn, dizziness; may raise blood pressure in some people.",
+    "safety_warnings": "Use caution with stomach ulcers, kidney disease, or blood thinners. Avoid in late pregnancy unless a clinician says otherwise."
+  },
+  "aspirin": {
+    "use": "Pain and fever relief; some adults use low doses for blood clot prevention per clinician advice.",
+    "side_effects": "Stomach irritation, bleeding risk, ringing in ears at high doses.",
+    "safety_warnings": "Not for children/teens with viral illness (Reye risk). Bleeding risk increases with other blood thinners."
+  },
+  "metformin": {
+    "use": "Helps control blood sugar in type 2 diabetes.",
+    "side_effects": "Nausea, diarrhea, stomach upset, especially when starting.",
+    "safety_warnings": "Rarely linked to a serious acid buildup (lactic acidosis), more often with kidney problems; follow prescribed monitoring."
+  },
+  "omeprazole": {
+    "use": "Reduces stomach acid for reflux, heartburn, and some ulcers.",
+    "side_effects": "Headache, diarrhea, stomach pain; long-term use may affect nutrient absorption.",
+    "safety_warnings": "Long-term PPI use should be reviewed with a clinician; may mask serious conditions if symptoms persist."
+  },
+  "amoxicillin": {
+    "use": "Antibiotic used for several bacterial infections as prescribed.",
+    "side_effects": "Diarrhea, nausea, rash; allergic reactions in some people.",
+    "safety_warnings": "Finish the prescribed course unless your clinician advises otherwise. Seek urgent care for severe allergy (swelling, breathing trouble)."
+  },
+  "sertraline": {
+    "use": "Used to treat depression, anxiety disorders, panic disorder, and related mood conditions.",
+    "side_effects": "Nausea, headache, sleep changes, dizziness, dry mouth, and upset stomach.",
+    "safety_warnings": "Do not stop suddenly without medical guidance. May increase suicidal thoughts in some younger patients during early treatment."
+  },
+  "fluoxetine": {
+    "use": "Used for depression, obsessive-compulsive disorder, panic disorder, and some anxiety conditions.",
+    "side_effects": "Nausea, insomnia, headache, sweating, and nervousness.",
+    "safety_warnings": "Monitor mood changes closely, especially at the start of treatment or dose changes."
+  },
+  "escitalopram": {
+    "use": "Used to treat major depressive disorder and generalized anxiety disorder.",
+    "side_effects": "Nausea, tiredness, sleep disturbance, and sexual side effects.",
+    "safety_warnings": "Do not combine with MAO inhibitors. Seek urgent care for severe allergic reactions or worsening suicidal thoughts."
+  },
+  "clonazepam": {
+    "use": "Used for panic disorder and seizure disorders in selected cases.",
+    "side_effects": "Drowsiness, dizziness, coordination problems, and fatigue.",
+    "safety_warnings": "Can cause dependence and withdrawal. Avoid alcohol and sedatives unless prescribed together."
+  },
+  "propranolol": {
+    "use": "Used for blood pressure, heart symptoms, tremors, and sometimes physical anxiety symptoms.",
+    "side_effects": "Fatigue, cold hands, dizziness, and slow heart rate.",
+    "safety_warnings": "Use cautiously in asthma and diabetes. Do not stop abruptly."
+  }
+}

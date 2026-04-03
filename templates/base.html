@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mental Wellness Assistant{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --theme-mint: #A8DADC;
+            --theme-navy: #1D3557;
+            --theme-blue: #457B9D;
+        }
+        body {
+            background-color: var(--theme-mint);
+            color: var(--theme-navy);
+        }
+        /* Logo + primary actions: navy → steel blue (matches mint page background) */
+        .gradient-bg {
+            background: linear-gradient(135deg, var(--theme-navy) 0%, var(--theme-blue) 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--theme-navy) 0%, var(--theme-blue) 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 25px -3px rgba(29, 53, 87, 0.35);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased">
+    {% block nav %}
+    <nav class="bg-white/95 shadow-lg border-b border-[#457B9D]/25 backdrop-blur-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    {% if session.user_id %}
+                    <a href="{{ url_for('dashboard') }}" class="mr-4 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors duration-200 inline-flex items-center justify-center shrink-0" title="Home" aria-label="Home">
+                        <i class="fas fa-home text-lg"></i>
+                    </a>
+                    {% endif %}
+                    <div class="flex items-center">
+                        <div class="gradient-bg p-2 rounded-lg mr-3">
+                            <i class="fas fa-brain text-white text-lg"></i>
+                        </div>
+                        <h1 class="text-xl font-bold text-[#1D3557]">Mental Wellness Assistant</h1>
+                    </div>
+                </div>
+                {% if session.user_id %}
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-700">Welcome, <span class="font-medium">{{ session.username }}</span></span>
+                    <a href="{{ url_for('logout') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white btn-primary hover:shadow-lg">
+                        <i class="fas fa-sign-out-alt mr-2"></i>
+                        Logout
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    {% endblock %}
+
+    <div class="min-h-screen">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded-lg shadow-sm {% if category == 'error' %}bg-red-50 border-l-4 border-red-400 text-red-700{% else %}bg-green-50 border-l-4 border-green-400 text-green-700{% endif %}">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    {% if category == 'error' %}
+                                        <i class="fas fa-exclamation-circle"></i>
+                                    {% else %}
+                                        <i class="fas fa-check-circle"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm">{{ message }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="mt-16 text-white" style="background-color: #1D3557;">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="text-center">
+                <div class="flex justify-center items-center mb-4">
+                    <div class="gradient-bg p-2 rounded-lg mr-3">
+                        <i class="fas fa-brain text-white"></i>
+                    </div>
+                    <span class="text-lg font-semibold">Mental Wellness Assistant</span>
+                </div>
+                <p class="text-gray-400 text-sm max-w-2xl mx-auto">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>Disclaimer:</strong> This is not a medical or professional mental health service. Please consult qualified professionals for serious mental health concerns.
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
