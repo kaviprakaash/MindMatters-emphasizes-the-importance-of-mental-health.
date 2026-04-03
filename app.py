@@ -88,6 +88,7 @@ OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 AI_PROVIDER = os.environ.get('AI_PROVIDER', 'auto').strip().lower()  # auto | openai | ollama
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
+<<<<<<< HEAD
 # Optional: if Ollama sits behind a reverse proxy that requires a bearer token.
 OLLAMA_API_KEY = os.environ.get('OLLAMA_API_KEY', '').strip()
 
@@ -158,6 +159,8 @@ def _effective_llm_mode():
         return 'ollama' if _ollama_reachable_in_this_runtime() else 'unconfigured'
     return 'unconfigured'
 
+=======
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 OPENFDA_BASE_URL = "https://api.fda.gov/drug/label.json"
 # Optional: https://open.fda.gov/apis/authentication/ — raises rate limits and can reduce failed requests.
 OPENFDA_API_KEY = os.environ.get('OPENFDA_API_KEY', '').strip()
@@ -281,7 +284,11 @@ def generate_ollama_response(message, history_turns):
     req = urllib.request.Request(
         f"{OLLAMA_BASE_URL}/api/chat",
         data=json.dumps(payload).encode("utf-8"),
+<<<<<<< HEAD
         headers=_ollama_http_headers(),
+=======
+        headers={"Content-Type": "application/json"},
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
         method="POST"
     )
 
@@ -289,10 +296,13 @@ def generate_ollama_response(message, history_turns):
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.URLError as e:
+<<<<<<< HEAD
         if _ollama_url_looks_local() and (
             _is_likely_cloud_host() or 'Connection refused' in str(e) or 'Errno 111' in str(e)
         ):
             raise RuntimeError(_ai_not_configured_message()) from e
+=======
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
         raise RuntimeError(
             "Could not reach Ollama. Start it with `ollama serve` and pull a model "
             f"like `ollama pull {OLLAMA_MODEL}`. Error: {e}"
@@ -316,6 +326,7 @@ def _llm_single_turn(
     """One-shot chat completion (OpenAI or Ollama). provider_override: 'openai' | 'ollama' | None (use AI_PROVIDER)."""
     to_openai = 45 if timeout_openai is None else timeout_openai
     to_ollama = 90 if timeout_ollama is None else timeout_ollama
+<<<<<<< HEAD
     ov = provider_override
     if ov in ('openai', 'ollama'):
         if ov == 'openai' and not OPENAI_API_KEY:
@@ -329,6 +340,11 @@ def _llm_single_turn(
 
     if provider == 'unconfigured':
         raise RuntimeError(_ai_not_configured_message())
+=======
+    provider = (provider_override or AI_PROVIDER or 'auto').strip().lower()
+    if provider == 'auto':
+        provider = 'openai' if OPENAI_API_KEY else 'ollama'
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -374,7 +390,11 @@ def _llm_single_turn(
         req = urllib.request.Request(
             f"{OLLAMA_BASE_URL}/api/chat",
             data=body,
+<<<<<<< HEAD
             headers=_ollama_http_headers(),
+=======
+            headers={"Content-Type": "application/json"},
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
             method="POST",
         )
         try:
@@ -394,7 +414,11 @@ def _llm_single_turn(
             raise RuntimeError("Ollama returned an empty response.")
         return content
 
+<<<<<<< HEAD
     raise ValueError("Invalid AI provider resolution.")
+=======
+    raise ValueError("Invalid AI_PROVIDER. Use 'auto', 'openai', or 'ollama'.")
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 
 def _parse_json_object_from_llm(text):
     """Extract first JSON object from model output (strips markdown fences if present)."""
@@ -592,6 +616,7 @@ def ollama_medication_lookup(raw_name):
             ollama_format_json=True,
         )
     except Exception as ex:
+<<<<<<< HEAD
         ex_s = str(ex).lower()
         if _is_likely_cloud_host() or 'connection refused' in ex_s or 'errno 111' in ex_s:
             msg = (
@@ -607,6 +632,17 @@ def ollama_medication_lookup(raw_name):
         return {
             "found": False,
             "message": msg,
+=======
+        hint = (
+            "If `ollama serve` says the address is already in use, Ollama is already running (e.g. the desktop app) - "
+            "you do not need to start it again. "
+            f"Confirm the model exists: `ollama list` should include `{OLLAMA_MODEL}`. "
+            "HTTP 500 often means restart Ollama, update it, or free GPU/RAM. "
+        )
+        return {
+            "found": False,
+            "message": f"{hint}Details: {ex}",
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
             "disclaimer": MEDICATION_DISCLAIMER,
         }
     obj = _parse_json_object_from_llm(text)
@@ -1806,6 +1842,7 @@ def api_chat():
         if detect_crisis(message):
             response = crisis_response()
         else:
+<<<<<<< HEAD
             mode = _effective_llm_mode()
             if mode == 'unconfigured':
                 response = (
@@ -1818,6 +1855,18 @@ def api_chat():
                 response = generate_ollama_response(message, history_turns)
             else:
                 raise ValueError("Invalid AI provider mode.")
+=======
+            provider = AI_PROVIDER
+            if provider == 'auto':
+                provider = 'openai' if OPENAI_API_KEY else 'ollama'
+
+            if provider == 'openai':
+                response = generate_ai_response(message, history_turns)
+            elif provider == 'ollama':
+                response = generate_ollama_response(message, history_turns)
+            else:
+                raise ValueError("Invalid AI_PROVIDER. Use 'auto', 'openai', or 'ollama'.")
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
 
         # Save chat
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1853,7 +1902,11 @@ def mood_data():
 
 @app.route('/api/medication_info', methods=['POST'])
 def api_medication_info():
+<<<<<<< HEAD
     """Medication summary from typed name: OpenFDA + cache + local fallback (hosted-friendly; no local Ollama required)."""
+=======
+    """Medication summary via Ollama from typed name only (educational, not medical advice)."""
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -1872,6 +1925,7 @@ def api_medication_info():
                 "disclaimer": MEDICATION_DISCLAIMER,
             }), 200
 
+<<<<<<< HEAD
         info = get_medication_information(medicine)
         if info.get("found"):
             card = {
@@ -1889,6 +1943,16 @@ def api_medication_info():
             "message": info.get("message") or "No information found.",
             "disclaimer": info.get("disclaimer", MEDICATION_DISCLAIMER),
         }), 200
+=======
+        info = ollama_medication_lookup(medicine)
+        if info.get("found"):
+            return jsonify({
+                "found": True,
+                "results": [info],
+                "disclaimer": MEDICATION_DISCLAIMER,
+            }), 200
+        return jsonify(info), 200
+>>>>>>> 21190656c0a74d4b00953afeb5ad44841019b961
     except Exception as e:
         traceback.print_exc()
         return jsonify({
